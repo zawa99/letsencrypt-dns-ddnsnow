@@ -11,7 +11,6 @@ logger = Logger.new(file, datetime_format: '%Y-%m-%d %H:%M:%S')
 
 logger.info "create start"
 logger.info ARGV
-logger.
 
 Dotenv.load
 sub_domain = ENV["DDNS_NOW_SUB_DOMAIN"]
