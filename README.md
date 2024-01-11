@@ -1,3 +1,9 @@
+# DDNS Now側で機能が増え、ツールが用意されたのでこれを使ってください。
+https://ddns.kuku.lu/manual.php#certbot
+
+
+
+
 # letsencrypt-dns-ddnsnow
 個人的なツールなので他環境で動くか不明.
 
