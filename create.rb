@@ -1,10 +1,11 @@
 require "rubygems"
 require "bundler/setup"
 
-require "mechanize"
 require "dotenv"
 require "logger"
 require "resolv"
+require 'uri'
+require 'selenium-webdriver'
 
 file = File.open('script.log', File::WRONLY | File::APPEND | File::CREAT)
 logger = Logger.new(file, datetime_format: '%Y-%m-%d %H:%M:%S')
@@ -12,9 +13,12 @@ logger = Logger.new(file, datetime_format: '%Y-%m-%d %H:%M:%S')
 logger.info "create start"
 logger.info ARGV
 
+# CONFIG
 Dotenv.load
 sub_domain = ENV["DDNS_NOW_SUB_DOMAIN"]
 password = ENV["DDNS_NOW_PASSWORD"]
+login_url = "https://ddns.kuku.lu/index.php"
+
 if sub_domain.nil? || password.nil?
   logger.error "need .env file. DDNS_NOW_SUB_DOMAIN, DDNS_NOW_PASSWORD."
   return
@@ -29,49 +33,74 @@ else
   return
 end
 
-# CONFIG
-login_url = "https://ddns.kuku.lu/index.php"
-
 # Login
-agent = Mechanize.new
-agent.user_agent_alias = "Windows Mozilla"
-html = agent.get(login_url)
-
-login_form = html.form_with(action: "index.php")
-login_form.field_with(name: 'login_domain').value = sub_domain
-login_form.field_with(name: 'login_password').value = password
-
-logged_in_page_html = agent.submit(login_form)
-
-unless logged_in_page_html.title.include?("詳細設定")
-  logger.error "login fail."
-  return
-end
-
-dns_form = logged_in_page_html.form_with(name: "uform")
-dns_form.field_with(name: "update_data_txt").value =
-  if dns_form.field_with(name: "update_data_txt").value != ""
-    [dns_form.field_with(name: "update_data_txt").value, value].join("\n")
-  else
-    value
-  end
-updated_page_html = agent.submit(dns_form)
-
-dns_form = updated_page_html.form_with(name: "uform")
-inputed_values = dns_form.field_with(name: "update_data_txt").value.split("\n")
-
-if inputed_values.include?(value)
-  dns_updated = false
-  until dns_updated
-    sleep 120
-    dns_results = [
-      Resolv::DNS.new(nameserver: '8.8.8.8').getresources(domain, Resolv::DNS::Resource::IN::TXT).flat_map(&:strings)
-    ].flatten.uniq
-    logger.info "txt records = #{dns_results}"
-    dns_updated = dns_results.include?(value)
-  end
-  sleep 120
-  logger.info "create succeess!"
+system("echo '' > nohup.out")
+pid = `ps ax | grep chrome | grep 35512 | grep -v "grep"`.split(" ").first
+port = "35512"
+if pid
+  system("DISPLAY=:1.0 nohup /opt/google/chrome/chrome --remote-debugging-port=35513 2>&1 &")
+  pid = `ps ax | grep chrome | grep 35513 | grep -v "grep"`.split(" ").first
+  port = "35513"
 else
-  logger.error "create fail."
+  system("DISPLAY=:1.0 nohup /opt/google/chrome/chrome --remote-debugging-port=35512 2>&1 &")
+  pid = `ps ax | grep chrome | grep 35512 | grep -v "grep"`.split(" ").first
+  port = "35512"
 end
+
+options = Selenium::WebDriver::Chrome::Options.new
+options.add_argument('--lang=ja-JP')
+options.add_argument('--no-sandbox')
+options.add_argument('--headless')
+options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36')
+options.add_option(:debugger_address, "127.0.0.1:#{port}")
+
+driver = Selenium::WebDriver.for :chrome, options: options
+driver.manage.timeouts.implicit_wait = 30
+driver.get(login_url)
+logger.info "ログイン画面へ移動"
+sleep 10
+
+login_domain_elem = driver.find_element(name: "login_domain")
+login_domain_elem.send_keys sub_domain
+login_password_elem = driver.find_element(name: "login_password")
+login_password_elem.send_keys password
+form = driver.find_element(css: "#area_login form")
+sleep 2
+form.submit
+logger.info "ログイン"
+sleep 10
+
+driver.get("https://ddns.kuku.lu/control.php")
+logger.info "設定画面へ移動"
+sleep 10
+
+# update
+txt = driver.find_element(name: "update_data_txt")
+txt
+old_value = txt.text
+txt.clear
+if old_value.size == 0
+  txt.send_keys value
+else
+  txt.send_keys [old_value, value].compact.join("\n")
+end
+sleep 2
+driver.execute_script("runUpdate()")
+sleep 10
+
+# ログアウト
+driver.get("https://ddns.kuku.lu/index.php")
+sleep 10
+
+btn2 = driver.find_element(xpath: "/html/body/div[2]/center/table/tbody/tr[2]/td/div[2]/div[1]/div/div/div/div[3]/a")
+btn2
+btn2.click
+logger.info "ログアウト"
+
+driver.quit
+system("kill #{pid}") unless pid.nil?
+logger.info "close"
+
+# DNS反映待ち
+sleep 65
+logger.info "waiting 65 sec."
