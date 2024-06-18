@@ -7,10 +7,10 @@ require "resolv"
 require 'uri'
 require 'selenium-webdriver'
 
-file = File.open('script.log', File::WRONLY | File::APPEND | File::CREAT)
+file = File.open('/home/ubuntu/letsencrypt-dns-ddnsnow/script.log', File::WRONLY | File::APPEND | File::CREAT)
 logger = Logger.new(file, datetime_format: '%Y-%m-%d %H:%M:%S')
 
-logger.info "create start"
+logger.info "**********create start**********"
 logger.info ARGV
 
 # CONFIG
@@ -56,8 +56,8 @@ options.add_option(:debugger_address, "127.0.0.1:#{port}")
 
 driver = Selenium::WebDriver.for :chrome, options: options
 driver.manage.timeouts.implicit_wait = 30
-driver.get(login_url)
 logger.info "ログイン画面へ移動"
+driver.get(login_url)
 sleep 10
 
 login_domain_elem = driver.find_element(name: "login_domain")
@@ -66,17 +66,16 @@ login_password_elem = driver.find_element(name: "login_password")
 login_password_elem.send_keys password
 form = driver.find_element(css: "#area_login form")
 sleep 2
-form.submit
 logger.info "ログイン"
+form.submit
 sleep 10
 
-driver.get("https://ddns.kuku.lu/control.php")
 logger.info "設定画面へ移動"
+driver.get("https://ddns.kuku.lu/control.php")
 sleep 10
 
 # update
 txt = driver.find_element(name: "update_data_txt")
-txt
 old_value = txt.text
 txt.clear
 if old_value.size == 0
@@ -85,22 +84,49 @@ else
   txt.send_keys [old_value, value].compact.join("\n")
 end
 sleep 2
+logger.info "レコード設定"
 driver.execute_script("runUpdate()")
 sleep 10
+logger.info "レコード設定完了"
+
+logger.info "設定画面へ移動"
+driver.get("https://ddns.kuku.lu/control.php")
+sleep 10
+
+logger.info "waiting 120 sec."
+sleep 120
+
+# inputed_values = driver.find_element(name: "update_data_txt")
+# if inputed_values.include?(value)
+#   dns_updated = false
+#   until dns_updated
+#     logger.info "waiting 60 sec."
+#     sleep 60
+
+#     dns_results = [
+#       Resolv::DNS.new(nameserver: '8.8.8.8').getresources(domain, Resolv::DNS::Resource::IN::TXT).flat_map(&:strings)
+#     ].flatten.uniq
+#     logger.info "txt records = #{dns_results}"
+#     dns_updated = dns_results.include?(value)
+#   end
+#   sleep 10
+#   logger.info "create succeess!"
+# else
+#   logger.error "create fail."
+# end
 
 # ログアウト
+logger.info "トップページへ移動"
 driver.get("https://ddns.kuku.lu/index.php")
 sleep 10
 
+logger.info "ログアウト"
 btn2 = driver.find_element(xpath: "/html/body/div[2]/center/table/tbody/tr[2]/td/div[2]/div[1]/div/div/div/div[3]/a")
 btn2
 btn2.click
-logger.info "ログアウト"
 
 driver.quit
 system("kill #{pid}") unless pid.nil?
 logger.info "close"
 
-# DNS反映待ち
-sleep 65
-logger.info "waiting 65 sec."
+logger.info "**********create end**********"

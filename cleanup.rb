@@ -7,10 +7,10 @@ require "resolv"
 require 'uri'
 require 'selenium-webdriver'
 
-file = File.open('script.log', File::WRONLY | File::APPEND | File::CREAT)
+file = File.open('/home/ubuntu/letsencrypt-dns-ddnsnow/script.log', File::WRONLY | File::APPEND | File::CREAT)
 logger = Logger.new(file, datetime_format: '%Y-%m-%d %H:%M:%S')
 
-logger.info "cleanup start"
+logger.info "**********cleanup start**********"
 logger.info ARGV
 
 # CONFIG
@@ -71,8 +71,8 @@ form.submit
 logger.info "ログイン"
 sleep 10
 
-driver.get("https://ddns.kuku.lu/control.php")
 logger.info "設定画面へ移動"
+driver.get("https://ddns.kuku.lu/control.php")
 sleep 10
 
 # update
@@ -82,17 +82,26 @@ old_value = txt.text
 txt.clear
 txt.send_keys old_value.gsub(value, "")
 
+logger.info "レコード設定"
 driver.execute_script("runUpdate()")
 sleep 10
+logger.info "レコード設定完了"
+
+logger.info "waiting 120 sec."
+sleep 120
 
 # ログアウト
+logger.info "トップページへ移動"
 driver.get("https://ddns.kuku.lu/index.php")
 sleep 10
+
+logger.info "ログアウト"
 btn2 = driver.find_element(xpath: "/html/body/div[2]/center/table/tbody/tr[2]/td/div[2]/div[1]/div/div/div/div[3]/a")
 btn2
 btn2.click
-logger.info "ログアウト"
 
 driver.quit
 system("kill #{pid}") unless pid.nil?
 logger.info "close"
+
+logger.info "**********cleanup end**********"
